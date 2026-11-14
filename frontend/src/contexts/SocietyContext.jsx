@@ -145,13 +145,25 @@ export function SocietyProvider({ children }) {
     [request]
   );
 
+  const runWorkspaceMutation = useCallback(
+    (loadingMessage, mutation) =>
+      withApiActivity(loadingMessage, async () => {
+        const result = await mutation();
+        await loadWorkspace(currentUser, activeSocietyId, loadingMessage);
+        return result;
+      }),
+    [activeSocietyId, currentUser, loadWorkspace]
+  );
+
   const initialize = useCallback(async () => {
     setIsInitializing(true);
     setInitializationError('');
     try {
-      const session = await refreshSession('Checking your session…');
-      await loadWorkspace(session.user);
-      setCurrentUser(session.user);
+      await withApiActivity('Checking your Session…', async () => {
+        const session = await refreshSession('Checking your session…');
+        await loadWorkspace(session.user, null, 'Checking your session…');
+        setCurrentUser(session.user);
+      });
     } catch (error) {
       clearSession();
       if (error.status !== 401) setInitializationError(error.message);
@@ -167,7 +179,9 @@ export function SocietyProvider({ children }) {
   const refreshWorkspace = useCallback(async () => {
     try {
       if (!currentUser) return await initialize();
-      await loadWorkspace(currentUser, activeSocietyId, 'Refreshing your society data…');
+      await withApiActivity('Refreshing your Society Data…', () =>
+        loadWorkspace(currentUser, activeSocietyId, 'Refreshing your Society Data…')
+      );
     } catch {
       return;
     }
@@ -206,11 +220,13 @@ export function SocietyProvider({ children }) {
       async logout() {
         let logoutError;
         try {
-          await apiRequest('/auth/logout', {
-            method: 'POST',
-            auth: false,
-            loadingMessage: 'Signing you out…'
-          });
+          await withApiActivity('Signing you out…', () =>
+            apiRequest('/auth/logout', {
+              method: 'POST',
+              auth: false,
+              loadingMessage: 'Signing you out…'
+            })
+          );
         } catch (error) {
           logoutError = error;
         } finally {
@@ -222,35 +238,41 @@ export function SocietyProvider({ children }) {
         if (actor?.role !== USER_ROLES.SUPER_ADMIN) throw new Error('Only the Super Admin can switch societies.');
         const society = workspace.societies.find((item) => item.id === societyId);
         if (!society || society.isActive === false) throw new Error('The selected society is not available.');
-        await loadWorkspace(currentUser, societyId, 'Switching society workspace…');
+        await withApiActivity('Switching Society Workspace…', () =>
+          loadWorkspace(currentUser, societyId, 'Switching Society Workspace…')
+        );
       },
       async createSociety({ name, address, chairmanName, chairmanEmail, chairmanPassword }) {
-        const result = await request('/societies', {
-          method: 'POST',
-          body: { name, address, chairmanName, chairmanEmail, chairmanPassword },
-          loadingMessage: 'Creating society…'
+        return withApiActivity('Creating Society…', async () => {
+          const result = await request('/societies', {
+            method: 'POST',
+            body: { name, address, chairmanName, chairmanEmail, chairmanPassword },
+            loadingMessage: 'Creating Society…'
+          });
+          await loadWorkspace(currentUser, result.society.id, 'Creating Society…');
+          return result.society;
         });
-        await loadWorkspace(currentUser, result.society.id, 'Creating society…');
-        return result.society;
       },
       async createUser({ name, email, role, title, apartment, phone, password }) {
-        const result = await request('/users', {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          body: { name, email, role, title, apartment, phone, password },
-          loadingMessage: 'Adding member…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Adding member…');
+        const result = await runWorkspaceMutation('Adding member…', () =>
+          request('/users', {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            body: { name, email, role, title, apartment, phone, password },
+            loadingMessage: 'Adding member…'
+          })
+        );
         return result.user;
       },
       async setUserActive(userId, isActive) {
-        await request(`/users/${userId}/access`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'PATCH',
-          body: { isActive: Boolean(isActive) },
-          loadingMessage: 'Updating member access…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Updating member access…');
+        await runWorkspaceMutation('Updating member access…', () =>
+          request(`/users/${userId}/access`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'PATCH',
+            body: { isActive: Boolean(isActive) },
+            loadingMessage: 'Updating member access…'
+          })
+        );
       },
       async resetUserPassword(userId, password) {
         await request(`/users/${userId}/password`, {
@@ -270,106 +292,116 @@ export function SocietyProvider({ children }) {
         return result;
       },
       async setMaintenance(month, amount, _actor, applyPermanently = false) {
-        const result = await request('/maintenance/schedule', {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          body: { month, amount, applyPermanently },
-          loadingMessage: 'Updating maintenance schedule…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Updating maintenance schedule…');
-        return result;
+        return runWorkspaceMutation('Updating maintenance schedule…', () =>
+          request('/maintenance/schedule', {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            body: { month, amount, applyPermanently },
+            loadingMessage: 'Updating maintenance schedule…'
+          })
+        );
       },
       async submitPaymentRequest(billId, paymentDetails) {
-        const result = await request(`/maintenance/bills/${billId}/payment-request`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          body: paymentDetails,
-          loadingMessage: 'Submitting payment request…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Submitting payment request…');
+        const result = await runWorkspaceMutation('Submitting payment request…', () =>
+          request(`/maintenance/bills/${billId}/payment-request`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            body: paymentDetails,
+            loadingMessage: 'Submitting payment request…'
+          })
+        );
         return result.paymentRequest;
       },
       async acceptPaymentRequest(billId) {
-        await request(`/maintenance/bills/${billId}/accept-payment-request`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          loadingMessage: 'Approving payment request…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Approving payment request…');
+        await runWorkspaceMutation('Approving payment request…', () =>
+          request(`/maintenance/bills/${billId}/accept-payment-request`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            loadingMessage: 'Approving payment request…'
+          })
+        );
       },
       async markBillPaid(billId, paymentDetails) {
-        await request(`/maintenance/bills/${billId}/mark-paid`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          body: paymentDetails,
-          loadingMessage: 'Recording bill payment…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Recording bill payment…');
+        await runWorkspaceMutation('Recording bill payment…', () =>
+          request(`/maintenance/bills/${billId}/mark-paid`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            body: paymentDetails,
+            loadingMessage: 'Recording bill payment…'
+          })
+        );
       },
       async revertBillPayment(billId) {
-        await request(`/maintenance/bills/${billId}/revert-payment`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          loadingMessage: 'Reverting bill payment…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Reverting bill payment…');
+        await runWorkspaceMutation('Reverting bill payment…', () =>
+          request(`/maintenance/bills/${billId}/revert-payment`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            loadingMessage: 'Reverting bill payment…'
+          })
+        );
       },
       async addExpense(transaction) {
-        const result = await request('/finances/transactions', {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          body: transaction,
-          loadingMessage: 'Adding expense…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Adding expense…');
+        const result = await runWorkspaceMutation('Adding expense…', () =>
+          request('/finances/transactions', {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            body: transaction,
+            loadingMessage: 'Adding expense…'
+          })
+        );
         return result.transaction;
       },
       async updateExpense(transactionId, transaction) {
-        const result = await request(`/finances/transactions/${transactionId}`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'PATCH',
-          body: transaction,
-          loadingMessage: 'Updating expense…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Updating expense…');
+        const result = await runWorkspaceMutation('Updating expense…', () =>
+          request(`/finances/transactions/${transactionId}`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'PATCH',
+            body: transaction,
+            loadingMessage: 'Updating expense…'
+          })
+        );
         return result.transaction;
       },
       async setExpensesVisibleToResidents(visible) {
-        await request('/societies/current/finance-visibility', {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'PATCH',
-          body: { visible: Boolean(visible) },
-          loadingMessage: 'Updating expense visibility…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Updating expense visibility…');
+        await runWorkspaceMutation('Updating expense visibility…', () =>
+          request('/societies/current/finance-visibility', {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'PATCH',
+            body: { visible: Boolean(visible) },
+            loadingMessage: 'Updating expense visibility…'
+          })
+        );
       },
       async createComplaint(complaint) {
-        const result = await request('/complaints', {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'POST',
-          body: complaint,
-          loadingMessage: 'Submitting complaint…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Submitting complaint…');
+        const result = await runWorkspaceMutation('Submitting complaint…', () =>
+          request('/complaints', {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'POST',
+            body: complaint,
+            loadingMessage: 'Submitting complaint…'
+          })
+        );
         return result.complaint;
       },
       async updateComplaintStatus(complaintId, status) {
-        await request(`/complaints/${complaintId}/status`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'PATCH',
-          body: { status },
-          loadingMessage: 'Updating complaint status…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Updating complaint status…');
+        await runWorkspaceMutation('Updating complaint status…', () =>
+          request(`/complaints/${complaintId}/status`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'PATCH',
+            body: { status },
+            loadingMessage: 'Updating complaint status…'
+          })
+        );
       },
       async closeOwnComplaint(complaintId) {
-        await request(`/complaints/${complaintId}/status`, {
-          ...societyRequestOptions(activeSocietyId),
-          method: 'PATCH',
-          body: { status: 'closed' },
-          loadingMessage: 'Closing your complaint…'
-        });
-        await loadWorkspace(currentUser, activeSocietyId, 'Closing your complaint…');
+        await runWorkspaceMutation('Closing your complaint…', () =>
+          request(`/complaints/${complaintId}/status`, {
+            ...societyRequestOptions(activeSocietyId),
+            method: 'PATCH',
+            body: { status: 'closed' },
+            loadingMessage: 'Closing your complaint…'
+          })
+        );
       },
       isAdmin: Boolean(currentUser && ADMIN_ROLES.includes(currentUser.role))
     }),
@@ -383,6 +415,7 @@ export function SocietyProvider({ children }) {
       loadWorkspace,
       refreshWorkspace,
       request,
+      runWorkspaceMutation,
       workspace,
       workspaceError,
       initializationError
