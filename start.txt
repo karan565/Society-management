@@ -27,3 +27,8 @@ In another terminal:
     npm install
     npm run start
 
+
+
+
+
+backend : https://society-management-7lsk.onrender.com
