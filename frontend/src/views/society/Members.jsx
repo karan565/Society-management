@@ -28,6 +28,7 @@ const roleLabel = (user) =>
 
 export default function Members() {
   const { currentUser, users, createUser, resetUserPassword, setUserActive } = useSociety();
+  const isSuperAdmin = currentUser.role === USER_ROLES.SUPER_ADMIN;
   const [dialog, setDialog] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [form, setForm] = useState(emptyMember);
@@ -92,7 +93,7 @@ export default function Members() {
             setDialog('create');
           }}
         >
-          Add a user
+          {isSuperAdmin ? 'Add a User' : 'Add Resident'}
         </Button>
       </Stack>
       {success && (
@@ -174,7 +175,7 @@ export default function Members() {
 
       <Dialog open={dialog === 'create'} onClose={closeDialog} fullWidth maxWidth="sm">
         <form onSubmit={handleCreate}>
-          <DialogTitle>Add a society user</DialogTitle>
+          <DialogTitle>{isSuperAdmin ? 'Add a Society User' : 'Add Resident'}</DialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ pt: 1 }}>
               {error && <Alert severity="error">{error}</Alert>}
@@ -234,7 +235,7 @@ export default function Members() {
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={closeDialog}>Cancel</Button>
             <Button type="submit" variant="contained">
-              Create account
+              {isSuperAdmin ? 'Create account' : 'Add Resident'}
             </Button>
           </DialogActions>
         </form>
