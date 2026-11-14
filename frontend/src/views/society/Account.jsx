@@ -1,4 +1,4 @@
-git status --shortimport { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import Alert from '@mui/material/Alert';
