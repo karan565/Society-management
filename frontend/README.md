@@ -1,4 +1,4 @@
-# GharMandal
+# GharMandal - A Society Management App
 
 A React and Material UI society-management portal with three access panels:
 
