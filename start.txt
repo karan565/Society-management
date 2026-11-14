@@ -1,0 +1,29 @@
+You can run both apps locally, but one important limitation: the frontend currently uses local storage and doesn’t call the backend yet. Setting its API URL alone won’t connect the portal’s screens to the backend. You can still verify that the backend and database work together using the health endpoint.
+
+1. Start the backend
+In a terminal:
+    Set-Location 'C:\Projects\Project 1\backend'
+    npm install
+    npm run db:generate
+    npm run db:migrate
+    npm run dev
+
+Make sure backend/.env has a valid DATABASE_URL and SUPER_ADMIN_PASSWORD. The backend can run locally while connecting to your Supabase database; in that case, the database itself is still hosted in Supabase.
+
+
+
+2. Check the database connection
+In a second terminal:
+    Invoke-RestMethod http://localhost:4000/api/health
+A successful response includes:
+    {"status":"ok","database":"connected"}
+
+
+
+
+3. Start the frontend
+In another terminal:
+    Set-Location 'C:\Projects\Project 1\frontend'
+    npm install
+    npm run start
+

@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  RESIDENT
+}
+
+enum BillStatus {
+  PENDING
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  CHEQUE
+  NEFT
+  RTGS
+  OTHER
+}
+
+enum PaymentRequestStatus {
+  PENDING
+  ACCEPTED
+  CANCELLED
+}
+
+enum FinancialTransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum ComplaintType {
+  COMPLAINT
+  SUGGESTION
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  REJECTED
+  CLOSED
+  COMPLETED
+}
+
+enum MaintenancePaymentStatus {
+  RECORDED
+  REVERTED
+}
+
+model Society {
+  id                         String                       @id @default(uuid()) @db.Uuid
+  name                       String                       @db.VarChar(160)
+  address                    String                       @default("") @db.VarChar(500)
+  isActive                   Boolean                      @default(true)
+  expensesVisibleToResidents Boolean                      @default(false)
+  maintenanceAmount          Decimal                      @default(3500) @db.Decimal(12, 2)
+  maintenanceEffectiveFrom   String?                      @db.VarChar(7)
+  createdAt                  DateTime                     @default(now())
+  updatedAt                  DateTime                     @updatedAt
+  users                      User[]
+  bills                      MaintenanceBill[]
+  maintenanceOverrides       MaintenanceOverride[]
+  transactions               FinancialTransaction[]
+  complaints                 Complaint[]
+  auditLogs                  AuditLog[]
+
+  @@index([isActive])
+}
+
+model User {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  societyId          String?                 @db.Uuid
+  name               String                  @db.VarChar(160)
+  email              String                  @unique @db.VarChar(320)
+  passwordHash       String                  @db.VarChar(255)
+  role               UserRole
+  title              String                  @default("") @db.VarChar(100)
+  apartment          String                  @default("") @db.VarChar(80)
+  phone              String                  @default("") @db.VarChar(40)
+  isActive           Boolean                 @default(true)
+  passwordChangedAt  DateTime                @default(now())
+  lastLoginAt        DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  society            Society?                @relation(fields: [societyId], references: [id], onDelete: Restrict)
+  sessions           Session[]
+  bills              MaintenanceBill[]       @relation("BillResident")
+  acceptedPayments   MaintenanceBill[]       @relation("BillPaymentAcceptor")
+  submittedRequests  PaymentRequest[]        @relation("PaymentRequestSubmitter")
+  reviewedRequests   PaymentRequest[]        @relation("PaymentRequestReviewer")
+  paymentRecords     MaintenancePayment[]   @relation("PaymentRecorder")
+  createdTransactions FinancialTransaction[] @relation("TransactionCreator")
+  updatedTransactions FinancialTransaction[] @relation("TransactionUpdater")
+  complaints         Complaint[]
+  auditLogs          AuditLog[]              @relation("AuditActor")
+
+  @@index([societyId, role])
+  @@index([societyId, isActive])
+}
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  refreshHash  String    @unique @db.VarChar(64)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  lastUsedAt   DateTime  @default(now())
+  userAgent    String?   @db.VarChar(500)
+  ipAddress    String?   @db.VarChar(64)
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model MaintenanceOverride {
+  id        String   @id @default(uuid()) @db.Uuid
+  societyId String   @db.Uuid
+  month     String   @db.VarChar(7)
+  amount    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  society   Society  @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@unique([societyId, month])
+}
+
+model MaintenanceBill {
+  id                    String               @id @default(uuid()) @db.Uuid
+  societyId             String               @db.Uuid
+  userId                String               @db.Uuid
+  month                 String               @db.VarChar(7)
+  amount                Decimal              @db.Decimal(12, 2)
+  dueDate               DateTime             @db.Date
+  status                BillStatus           @default(PENDING)
+  paidAt                DateTime?
+  paymentMethod         PaymentMethod?
+  paymentReference      String               @default("") @db.VarChar(160)
+  paymentNotes          String               @default("") @db.VarChar(1000)
+  paymentAcceptedById   String?              @db.Uuid
+  paymentAcceptedByName String               @default("") @db.VarChar(160)
+  paymentRecordedAt     DateTime?
+  receiptNo             String?              @unique @db.VarChar(64)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  society               Society              @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  resident              User                 @relation("BillResident", fields: [userId], references: [id], onDelete: Restrict)
+  acceptedBy            User?                @relation("BillPaymentAcceptor", fields: [paymentAcceptedById], references: [id], onDelete: SetNull)
+  paymentRequest        PaymentRequest?
+  paymentRecords        MaintenancePayment[]
+
+  @@unique([societyId, userId, month])
+  @@index([societyId, month, status])
+  @@index([userId, month, status])
+}
+
+model PaymentRequest {
+  id             String                @id @default(uuid()) @db.Uuid
+  billId         String                @unique @db.Uuid
+  method         PaymentMethod
+  paymentDate    DateTime              @db.Date
+  reference      String                @default("") @db.VarChar(160)
+  notes          String                @default("") @db.VarChar(1000)
+  status         PaymentRequestStatus  @default(PENDING)
+  submittedById  String                @db.Uuid
+  reviewedById   String?               @db.Uuid
+  submittedAt    DateTime              @default(now())
+  reviewedAt     DateTime?
+  bill           MaintenanceBill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  submittedBy    User                  @relation("PaymentRequestSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  reviewedBy     User?                 @relation("PaymentRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, submittedAt])
+}
+
+model MaintenancePayment {
+  id             String                  @id @default(uuid()) @db.Uuid
+  billId         String                  @db.Uuid
+  recordedById   String?                 @db.Uuid
+  amount         Decimal                 @db.Decimal(12, 2)
+  method         PaymentMethod
+  reference      String                  @default("") @db.VarChar(160)
+  notes          String                  @default("") @db.VarChar(1000)
+  receiptNo      String                  @unique @db.VarChar(64)
+  paidAt         DateTime
+  status         MaintenancePaymentStatus @default(RECORDED)
+  revertedAt     DateTime?
+  createdAt      DateTime                @default(now())
+  bill           MaintenanceBill         @relation(fields: [billId], references: [id], onDelete: Restrict)
+  recordedBy     User?                   @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@index([billId, status])
+  @@index([paidAt, status])
+}
+
+model FinancialTransaction {
+  id          String                   @id @default(uuid()) @db.Uuid
+  societyId   String                   @db.Uuid
+  type        FinancialTransactionType
+  title       String                   @db.VarChar(160)
+  amount      Decimal                  @db.Decimal(12, 2)
+  date        DateTime                 @db.Date
+  notes       String                   @default("") @db.VarChar(2000)
+  createdById String?                  @db.Uuid
+  updatedById String?                  @db.Uuid
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  society     Society                  @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  createdBy   User?                    @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?                    @relation("TransactionUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([societyId, date, type])
+}
+
+model Complaint {
+  id          String          @id @default(uuid()) @db.Uuid
+  societyId   String          @db.Uuid
+  userId      String          @db.Uuid
+  type        ComplaintType
+  title       String          @db.VarChar(100)
+  description String          @db.VarChar(2000)
+  status      ComplaintStatus @default(OPEN)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  society     Society         @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  resident    User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([societyId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  societyId  String?  @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(80)
+  entityId   String?  @db.VarChar(64)
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  society    Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([societyId, createdAt])
+  @@index([actorId, createdAt])
+}
