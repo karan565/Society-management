@@ -15,6 +15,7 @@ Express API for the society portal. It uses PostgreSQL, Prisma migrations, passw
    - Use a unique strong `SUPER_ADMIN_PASSWORD`.
    - Set `DATABASE_URL` to the connection string used by the running API.
    - Set `DIRECT_URL` to a direct or session-pooler PostgreSQL connection for Prisma migrations.
+   - `PRISMA_CONNECTION_LIMIT` defaults to `3` per API process to help stay within hosted database pool limits.
    - Set `FRONTEND_ORIGINS` to the exact browser origin(s) that may call this API.
 3. Install dependencies with `npm install`.
 4. Apply the included initial schema with `npm run db:migrate`.
@@ -33,7 +34,7 @@ For production, run `npm run db:generate`, `npm run db:migrate`, and then `npm s
 - `GET /api/auth/me` returns the authenticated user. `POST /api/auth/change-password` accepts `{ "currentPassword": "...", "newPassword": "..." }` and revokes existing sessions.
 - Admin password resets and account deactivation also revoke the target user's sessions.
 
-For a frontend hosted on a different site, set `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none`, configure the exact frontend origin, and use HTTPS. Keep refresh tokens out of JavaScript storage.
+For a frontend hosted on a different site, set `COOKIE_SECURE=true`, `COOKIE_SAME_SITE=none`, configure the exact frontend origin, and use HTTPS. Keep refresh tokens out of JavaScript storage. For hosted databases with session-client limits, prefer the provider's transaction-pooler URL for `DATABASE_URL`; keep `DIRECT_URL` for Prisma migrations. The API also caps Prisma's connections with `PRISMA_CONNECTION_LIMIT` (default `3`) per running process.
 
 ## Society scoping and roles
 
