@@ -16,7 +16,6 @@ import Switch from '@mui/material/Switch';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
 import TableFooter from '@mui/material/TableFooter';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
@@ -30,6 +29,7 @@ import {
 } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
 import MainCard from 'ui-component/cards/MainCard';
+import ResponsiveTable from 'ui-component/ResponsiveTable';
 
 const today = new Date().toISOString().slice(0, 10);
 const emptyTransaction = { type: FINANCIAL_TRANSACTION_TYPES.EXPENSE, title: '', amount: '', date: today, notes: '' };
@@ -279,7 +279,7 @@ export default function Expenses() {
 
       {(isAdmin || currentSociety.expensesVisibleToResidents) && (
         <MainCard title={`Monthly statement · ${currentYear}`}>
-          <TableContainer>
+          <ResponsiveTable minWidth={650}>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -320,7 +320,7 @@ export default function Expenses() {
                 </TableRow>
               </TableFooter>
             </Table>
-          </TableContainer>
+          </ResponsiveTable>
         </MainCard>
       )}
 
@@ -401,7 +401,7 @@ export default function Expenses() {
                   </Typography>
                 </Grid>
               </Grid>
-              <TableContainer>
+              <ResponsiveTable minWidth={700}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -450,7 +450,7 @@ export default function Expenses() {
                       )}
                   </TableBody>
                 </Table>
-              </TableContainer>
+              </ResponsiveTable>
             </Stack>
           )}
         </DialogContent>

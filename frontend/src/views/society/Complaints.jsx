@@ -18,6 +18,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import MainCard from 'ui-component/cards/MainCard';
+import ResponsiveTable from 'ui-component/ResponsiveTable';
 import {
   COMPLAINT_STATUS_COLORS,
   COMPLAINT_STATUS_LABELS,
@@ -96,7 +97,8 @@ export default function Complaints() {
       {success && <Alert severity="success" onClose={() => setSuccess('')}>{success}</Alert>}
       <MainCard title={`${isAdmin ? 'All society requests' : 'Your submissions'} · ${visibleRequests.length}`}>
         {visibleRequests.length ? (
-          <Table size="small">
+          <ResponsiveTable minWidth={isAdmin ? 900 : 700}>
+            <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Date</TableCell>
@@ -158,7 +160,8 @@ export default function Complaints() {
                 );
               })}
             </TableBody>
-          </Table>
+            </Table>
+          </ResponsiveTable>
         ) : (
           <Typography color="text.secondary">{isAdmin ? 'No resident requests have been submitted.' : 'You have not submitted any requests yet.'}</Typography>
         )}

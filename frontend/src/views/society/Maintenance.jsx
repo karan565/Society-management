@@ -22,6 +22,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import MainCard from 'ui-component/cards/MainCard';
+import ResponsiveTable from 'ui-component/ResponsiveTable';
 import { DEFAULT_MAINTENANCE_AMOUNT, PAYMENT_METHODS, PAYMENT_REFERENCE_LABELS, USER_ROLES } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
 import { downloadMaintenanceReceipt } from 'utils/maintenanceReceipt';
@@ -201,7 +202,8 @@ export default function Maintenance() {
 
       <MainCard title={`${monthLabel(month)} · ${monthBills.length} bills`}>
         {monthBills.length ? (
-          <Table size="small">
+          <ResponsiveTable minWidth={900}>
+            <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Resident</TableCell>
@@ -290,7 +292,8 @@ export default function Maintenance() {
                 );
               })}
             </TableBody>
-          </Table>
+            </Table>
+          </ResponsiveTable>
         ) : residents.length === 0 ? (
           <Typography color="text.secondary">Add resident accounts to create maintenance bills.</Typography>
         ) : null}

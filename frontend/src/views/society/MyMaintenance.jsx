@@ -22,6 +22,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import MainCard from 'ui-component/cards/MainCard';
+import ResponsiveTable from 'ui-component/ResponsiveTable';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 const monthLabel = (month) => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
@@ -69,7 +70,8 @@ export default function MyMaintenance() {
   const paymentReferenceLabel = PAYMENT_REFERENCE_LABELS[paymentDetails.method];
 
   const renderRows = (items, isPaid) => (
-    <Table size="small">
+    <ResponsiveTable minWidth={650}>
+      <Table size="small">
       <TableHead>
         <TableRow>
           <TableCell>Month</TableCell>
@@ -110,7 +112,8 @@ export default function MyMaintenance() {
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </ResponsiveTable>
   );
 
   return (

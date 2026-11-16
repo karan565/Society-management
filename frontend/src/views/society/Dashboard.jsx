@@ -16,6 +16,7 @@ import Box from '@mui/material/Box';
 import { IconBuildingCommunity, IconCash, IconHome, IconMessageReport, IconUsers } from '@tabler/icons-react';
 
 import MainCard from 'ui-component/cards/MainCard';
+import ResponsiveTable from 'ui-component/ResponsiveTable';
 import { COMPLAINT_STATUSES, USER_ROLES } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
 import { downloadMaintenanceReceipt } from 'utils/maintenanceReceipt';
@@ -207,7 +208,8 @@ export default function SocietyDashboard() {
 
       <MainCard title={isResident ? 'Your recent maintenance' : 'This month’s maintenance'}>
         {latestBills.length ? (
-          <Table size="small">
+          <ResponsiveTable minWidth={560}>
+            <Table size="small">
             <TableHead>
               <TableRow>
                 {!isResident && <TableCell>Resident</TableCell>}
@@ -249,7 +251,8 @@ export default function SocietyDashboard() {
                 );
               })}
             </TableBody>
-          </Table>
+            </Table>
+          </ResponsiveTable>
         ) : (
           <Typography color="text.secondary">No maintenance bills have been set for this month yet.</Typography>
         )}

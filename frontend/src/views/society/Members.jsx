@@ -19,6 +19,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import MainCard from 'ui-component/cards/MainCard';
+import ResponsiveTable from 'ui-component/ResponsiveTable';
 import { USER_ROLE_LABELS, USER_ROLES } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
 
@@ -132,63 +133,65 @@ export default function Members() {
           </Typography>
         }
       >
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Role</TableCell>
-              <TableCell>Apartment</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell> &nbsp;Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {members.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>
-                  <Chip size="small" label={roleLabel(user)} color={user.role === USER_ROLES.ADMIN ? 'primary' : 'default'} />
-                </TableCell>
-                <TableCell>{user.apartment || '—'}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip
-                      size="small"
-                      label={user.isActive === false ? 'Inactive' : 'Active'}
-                      color={user.isActive === false ? 'default' : 'success'}
-                    />
-                    {(currentUser.role === USER_ROLES.SUPER_ADMIN ||
-                      (currentUser.role === USER_ROLES.ADMIN && user.role === USER_ROLES.RESIDENT)) && (
-                      <Switch
-                        checked={user.isActive !== false}
-                        onChange={() => handleToggleActive(user)}
-                        color="success"
-                        inputProps={{ 'aria-label': `Set ${user.name} account ${user.isActive === false ? 'active' : 'inactive'}` }}
-                      />
-                    )}
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  {(currentUser.role === USER_ROLES.SUPER_ADMIN || user.role === USER_ROLES.RESIDENT) && (
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setNewPassword('');
-                        setError('');
-                        setDialog('password');
-                      }}
-                    >
-                      Reset password
-                    </Button>
-                  )}
-                </TableCell>
+        <ResponsiveTable minWidth={800}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Role</TableCell>
+                <TableCell>Apartment</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell> &nbsp;Actions</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {members.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>
+                    <Chip size="small" label={roleLabel(user)} color={user.role === USER_ROLES.ADMIN ? 'primary' : 'default'} />
+                  </TableCell>
+                  <TableCell>{user.apartment || '—'}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Chip
+                        size="small"
+                        label={user.isActive === false ? 'Inactive' : 'Active'}
+                        color={user.isActive === false ? 'default' : 'success'}
+                      />
+                      {(currentUser.role === USER_ROLES.SUPER_ADMIN ||
+                        (currentUser.role === USER_ROLES.ADMIN && user.role === USER_ROLES.RESIDENT)) && (
+                        <Switch
+                          checked={user.isActive !== false}
+                          onChange={() => handleToggleActive(user)}
+                          color="success"
+                          inputProps={{ 'aria-label': `Set ${user.name} account ${user.isActive === false ? 'active' : 'inactive'}` }}
+                        />
+                      )}
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    {(currentUser.role === USER_ROLES.SUPER_ADMIN || user.role === USER_ROLES.RESIDENT) && (
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setNewPassword('');
+                          setError('');
+                          setDialog('password');
+                        }}
+                      >
+                        Reset password
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ResponsiveTable>
       </MainCard>
 
       <Dialog open={dialog === 'create'} onClose={closeDialog} fullWidth maxWidth="sm">
