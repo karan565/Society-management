@@ -31,6 +31,7 @@ import { downloadMaintenanceReceipt } from 'utils/maintenanceReceipt';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 const monthLabel = (month) => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+const homeCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const createEmptyPayment = () => ({
   method: 'Cash',
   paymentDate: new Date().toISOString().slice(0, 10),
@@ -52,6 +53,8 @@ export default function Maintenance() {
     acceptPaymentRequest
   } = useSociety();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [filterMonth, setFilterMonth] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [amount, setAmount] = useState('');
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [maintenanceScope, setMaintenanceScope] = useState('month');
@@ -60,10 +63,34 @@ export default function Maintenance() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const monthBills = useMemo(
-    () => bills.filter((bill) => bill.month === month).sort((a, b) => a.userId.localeCompare(b.userId)),
-    [bills, month]
+    () =>
+      bills
+        .filter((bill) => bill.month === `${filterYear}-${filterMonth}`)
+        .sort((a, b) => {
+          const homeA = users.find((user) => user.id === a.userId)?.apartment || '';
+          const homeB = users.find((user) => user.id === b.userId)?.apartment || '';
+          return homeCollator.compare(homeA, homeB);
+        }),
+    [bills, filterMonth, filterYear, users]
   );
   const residents = users.filter((user) => user.role === USER_ROLES.RESIDENT);
+  const creationMonth = currentSociety?.createdAt?.slice(0, 7) || `${currentYear}-01`;
+  const creationYear = Number(creationMonth.slice(0, 4));
+  const currentMonthNumber = new Date().getMonth() + 1;
+  const minimumFilterMonth = filterYear === creationYear ? Number(creationMonth.slice(5, 7)) : 1;
+  const maximumFilterMonth = filterYear === currentYear ? currentMonthNumber : 12;
+  const minimumYear = Math.min(creationYear, 2000);
+  const years = Array.from({ length: currentYear - minimumYear + 1 }, (_, index) => currentYear - index);
+
+  const handleFilterYearChange = (event) => {
+    const nextYear = Number(event.target.value);
+    setFilterYear(nextYear);
+    const selectedMonth = Number(filterMonth);
+    const minMonth = nextYear === creationYear ? Number(creationMonth.slice(5, 7)) : 1;
+    const maxMonth = nextYear === currentYear ? currentMonthNumber : 12;
+    if (selectedMonth < minMonth) setFilterMonth(String(minMonth).padStart(2, '0'));
+    else if (selectedMonth > maxMonth) setFilterMonth(String(maxMonth).padStart(2, '0'));
+  };
 
   useEffect(() => {
     const scheduledAmount = maintenanceAmountForMonth(currentSociety, month);
@@ -74,6 +101,11 @@ export default function Maintenance() {
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     setMonth(`${currentYear}-${currentMonth}`);
   }, [currentYear]);
+
+  useEffect(() => {
+    setFilterYear(currentYear);
+    setFilterMonth(String(currentMonthNumber).padStart(2, '0'));
+  }, [currentSociety?.id, currentYear]);
 
   const handleSetMaintenance = (event) => {
     event.preventDefault();
@@ -210,7 +242,64 @@ export default function Maintenance() {
         </Typography>
       </MainCard>
 
-      <MainCard title={`${monthLabel(month)} · ${monthBills.length} entries`}>
+      <MainCard
+        title={`${monthLabel(`${filterYear}-${filterMonth}`)} · ${monthBills.length} entries`}
+        headerSX={{
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          '& .MuiCardHeader-content': { flexBasis: { xs: '100%', sm: 'auto' } },
+          '& .MuiCardHeader-title': { whiteSpace: 'nowrap' },
+          '& .MuiCardHeader-action': {
+            alignSelf: { xs: 'stretch', sm: 'center' },
+            width: { xs: '100%', sm: 'auto' },
+            margin: { xs: '16px 0 0', sm: '-8px 0 -8px auto' }
+          }
+        }}
+        secondary={
+          <Stack
+            direction="row"
+            spacing={0.75}
+            sx={{ flexWrap: 'wrap', justifyContent: 'flex-end', width: { xs: '100%', sm: 'auto' } }}
+          >
+              <TextField
+                select
+                size="small"
+                label="Month"
+                value={filterMonth}
+                onChange={(event) => setFilterMonth(event.target.value)}
+                sx={{ width: 132 }}
+              >
+                {Array.from({ length: 12 }, (_, index) => {
+                  const value = String(index + 1).padStart(2, '0');
+                  const label = new Date(2026, index, 1).toLocaleDateString('en-IN', { month: 'long' });
+                  return (
+                    <MenuItem
+                      key={value}
+                      value={value}
+                      disabled={index + 1 < minimumFilterMonth || index + 1 > maximumFilterMonth}
+                    >
+                      {label}
+                    </MenuItem>
+                  );
+                })}
+              </TextField>
+              <TextField
+                select
+                size="small"
+                label="Year"
+                value={filterYear}
+                onChange={handleFilterYearChange}
+                sx={{ width: 90 }}
+              >
+                {years.map((year) => (
+                  <MenuItem key={year} value={year} disabled={year < creationYear}>
+                    {year}
+                  </MenuItem>
+                ))}
+              </TextField>
+          </Stack>
+        }
+      >
         {monthBills.length ? (
           <ResponsiveTable minWidth={900}>
             <Table size="small">
