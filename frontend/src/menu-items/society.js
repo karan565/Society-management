@@ -32,7 +32,7 @@ const society = {
     },
     {
       id: 'my-maintenance',
-      title: 'My maintenance',
+      title: 'My Maintenance',
       type: 'item',
       url: '/my-maintenance',
       icon: IconHome,

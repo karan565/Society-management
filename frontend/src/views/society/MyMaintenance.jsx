@@ -36,13 +36,21 @@ const createEmptyPayment = () => ({
 
 export default function MyMaintenance() {
   const { currentUser, currentSociety, bills, revertedPayments, submitPaymentRequest } = useSociety();
+  const [historyYear, setHistoryYear] = useState(new Date().getFullYear());
   const [selectedBill, setSelectedBill] = useState(null);
   const [paymentDetails, setPaymentDetails] = useState(createEmptyPayment);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const ownBills = bills.filter((bill) => bill.userId === currentUser.id).sort((a, b) => a.month.localeCompare(b.month));
   const pending = ownBills.filter((bill) => bill.status === 'pending');
-  const paid = ownBills.filter((bill) => bill.status === 'paid');
+  const paid = ownBills.filter((bill) => bill.status === 'paid' && Number(bill.month.slice(0, 4)) === historyYear);
+  const creationYear = Math.max(
+    Number(currentSociety?.createdAt?.slice(0, 4)) || historyYear,
+    Number(currentUser?.createdAt?.slice(0, 4)) || historyYear
+  );
+  const historyYears = Array.from({ length: new Date().getFullYear() - Math.min(creationYear, new Date().getFullYear()) + 1 }, (_, index) =>
+    new Date().getFullYear() - index
+  );
 
   const openPaymentDialog = (bill) => {
     setError('');
@@ -120,7 +128,7 @@ export default function MyMaintenance() {
   return (
     <Stack spacing={3}>
       <div>
-        <Typography variant="h2">My maintenance</Typography>
+        <Typography variant="h2">My Maintenance</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.75 }}>
           Maintenance entries start from when your apartment was added. The society committee reviews submitted payment details.
         </Typography>
@@ -134,11 +142,37 @@ export default function MyMaintenance() {
           <Typography color="text.secondary">You have no pending maintenance bills.</Typography>
         )}
       </MainCard>
-      <MainCard title={`Payment history · ${paid.length}`}>
+      <MainCard
+        title={`Payment history · ${paid.length}`}
+        headerSX={{
+          alignItems: 'center',
+          '& .MuiCardHeader-action': { alignSelf: 'center', my: 0 }
+        }}
+        secondary={
+          <TextField
+            select
+            size="small"
+            label="Year"
+            value={historyYear}
+            onChange={(event) => setHistoryYear(Number(event.target.value))}
+            sx={{ width: 90 }}
+          >
+            {historyYears.map((year) => (
+              <MenuItem key={year} value={year} disabled={year < creationYear}>
+                {year}
+              </MenuItem>
+            ))}
+          </TextField>
+        }
+      >
         {paid.length ? (
           renderRows(paid, true)
         ) : (
-          <Typography color="text.secondary">Paid receipts will appear here after the cashier records your payment.</Typography>
+          <Typography color="text.secondary">
+            {ownBills.some((bill) => bill.status === 'paid')
+              ? `There are no paid maintenance receipts for ${historyYear}.`
+              : 'Paid receipts will appear here after the cashier records your payment.'}
+          </Typography>
         )}
       </MainCard>
       <RevertedPaymentHistory payments={revertedPayments} users={[currentUser]} isAdmin={false} />

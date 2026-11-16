@@ -61,7 +61,7 @@ export default function MainLayout() {
       '/societies': 'Society management',
       '/people': 'People & access',
       '/maintenance': 'Maintenance',
-      '/my-maintenance': 'My maintenance',
+      '/my-maintenance': 'My Maintenance',
       '/expenses': 'Society Finances',
       '/complaints': 'Complaints & suggestions',
       '/account': 'My account'
