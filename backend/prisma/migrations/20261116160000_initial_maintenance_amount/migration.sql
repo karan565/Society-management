@@ -1,0 +1,2 @@
+ALTER TABLE "Society"
+ADD COLUMN "initialMaintenanceAmount" DECIMAL(12, 2) NOT NULL DEFAULT 3500;

@@ -38,9 +38,18 @@ export async function listSocieties(_req, res) {
 
 export async function createSociety(req, res) {
   const passwordHash = await bcrypt.hash(req.body.chairmanPassword, 12);
+  const createdAt = new Date();
+  const maintenanceEffectiveFrom = createdAt.toISOString().slice(0, 7);
   const result = await prisma.$transaction(async (tx) => {
     const society = await tx.society.create({
-      data: { name: req.body.name, address: req.body.address },
+      data: {
+        name: req.body.name,
+        address: req.body.address,
+        maintenanceAmount: req.body.maintenanceAmount,
+        initialMaintenanceAmount: req.body.maintenanceAmount,
+        maintenanceEffectiveFrom,
+        createdAt
+      },
       select: societySelect
     });
     const chairman = await tx.user.create({
@@ -59,7 +68,7 @@ export async function createSociety(req, res) {
       action: 'society.created',
       entityType: 'Society',
       entityId: society.id,
-      metadata: { chairmanId: chairman.id }
+      metadata: { chairmanId: chairman.id, maintenanceAmount: req.body.maintenanceAmount, maintenanceEffectiveFrom }
     });
     return { society, chairman };
   });

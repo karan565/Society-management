@@ -19,7 +19,7 @@ async function assertVisible(req) {
 async function getFundBalance(tx, societyId) {
   const [payments, transactions] = await Promise.all([
     tx.maintenancePayment.aggregate({
-      where: { status: 'RECORDED', bill: { is: { societyId } } },
+      where: { status: 'RECORDED', societyId },
       _sum: { amount: true }
     }),
     tx.financialTransaction.findMany({ where: { societyId }, select: { type: true, amount: true } })
@@ -51,7 +51,7 @@ export async function getMonthlySummary(req, res) {
   const end = new Date(Date.UTC(year + 1, 0, 1));
   const [payments, transactions] = await Promise.all([
     prisma.maintenancePayment.findMany({
-      where: { status: 'RECORDED', bill: { is: { societyId: req.societyId } }, paidAt: { gte: start, lt: end } },
+      where: { status: 'RECORDED', societyId: req.societyId, paidAt: { gte: start, lt: end } },
       select: { amount: true, paidAt: true }
     }),
     prisma.financialTransaction.findMany({
@@ -98,7 +98,7 @@ export async function getStatement(req, res) {
   const end = new Date(Date.UTC(Number(yearText), Number(monthText), 1));
   const [priorPayments, priorTransactions, payments, transactions] = await Promise.all([
     prisma.maintenancePayment.aggregate({
-      where: { status: 'RECORDED', bill: { is: { societyId: req.societyId } }, paidAt: { lt: start } },
+      where: { status: 'RECORDED', societyId: req.societyId, paidAt: { lt: start } },
       _sum: { amount: true }
     }),
     prisma.financialTransaction.findMany({
@@ -106,7 +106,7 @@ export async function getStatement(req, res) {
       select: { type: true, amount: true }
     }),
     prisma.maintenancePayment.findMany({
-      where: { status: 'RECORDED', bill: { is: { societyId: req.societyId } }, paidAt: { gte: start, lt: end } },
+      where: { status: 'RECORDED', societyId: req.societyId, paidAt: { gte: start, lt: end } },
       select: { amount: true }
     }),
     prisma.financialTransaction.findMany({

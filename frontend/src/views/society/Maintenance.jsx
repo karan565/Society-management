@@ -23,8 +23,10 @@ import Typography from '@mui/material/Typography';
 
 import MainCard from 'ui-component/cards/MainCard';
 import ResponsiveTable from 'ui-component/ResponsiveTable';
-import { DEFAULT_MAINTENANCE_AMOUNT, PAYMENT_METHODS, PAYMENT_REFERENCE_LABELS, USER_ROLES } from 'common/constants';
+import RevertedPaymentHistory from './RevertedPaymentHistory';
+import { PAYMENT_METHODS, PAYMENT_REFERENCE_LABELS, USER_ROLES } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
+import { maintenanceAmountForMonth } from 'utils/maintenanceEntries';
 import { downloadMaintenanceReceipt } from 'utils/maintenanceReceipt';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -37,10 +39,20 @@ const createEmptyPayment = () => ({
 });
 
 export default function Maintenance() {
-  const { currentUser, currentSociety, currentYear, users, bills, setMaintenance, markBillPaid, revertBillPayment, acceptPaymentRequest } =
-    useSociety();
+  const {
+    currentUser,
+    currentSociety,
+    currentYear,
+    users,
+    bills,
+    revertedPayments,
+    setMaintenance,
+    markBillPaid,
+    revertBillPayment,
+    acceptPaymentRequest
+  } = useSociety();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [amount, setAmount] = useState(String(DEFAULT_MAINTENANCE_AMOUNT));
+  const [amount, setAmount] = useState('');
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [maintenanceScope, setMaintenanceScope] = useState('month');
   const [paymentBill, setPaymentBill] = useState(null);
@@ -54,12 +66,9 @@ export default function Maintenance() {
   const residents = users.filter((user) => user.role === USER_ROLES.RESIDENT);
 
   useEffect(() => {
-    const scheduledAmount =
-      currentSociety?.maintenanceEffectiveFrom && month >= currentSociety.maintenanceEffectiveFrom
-        ? currentSociety.maintenanceAmount
-        : null;
-    setAmount(monthBills.length ? String(monthBills[0].amount) : String(scheduledAmount ?? DEFAULT_MAINTENANCE_AMOUNT));
-  }, [currentSociety?.maintenanceAmount, currentSociety?.maintenanceEffectiveFrom, month, monthBills]);
+    const scheduledAmount = maintenanceAmountForMonth(currentSociety, month);
+    setAmount(monthBills.length ? String(monthBills[0].amount) : String(scheduledAmount ?? ''));
+  }, [currentSociety, month, monthBills]);
 
   useEffect(() => {
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
@@ -111,7 +120,7 @@ export default function Maintenance() {
     setError('');
     setSuccess('');
     try {
-      await markBillPaid(paymentBill.id, paymentDetails, currentUser);
+      await markBillPaid(paymentBill, paymentDetails);
       setSuccess('Payment recorded and the resident receipt is ready to download.');
       closePaymentDialog();
     } catch (paymentError) {
@@ -124,7 +133,7 @@ export default function Maintenance() {
     setSuccess('');
     try {
       await revertBillPayment(bill.id, currentUser);
-      setSuccess(`Payment for ${monthLabel(bill.month)} was reverted. The bill is pending again.`);
+      setSuccess(`Payment for ${monthLabel(bill.month)} was reverted. The month is now unpaid.`);
     } catch (revertError) {
       setError(revertError.message);
     }
@@ -148,7 +157,8 @@ export default function Maintenance() {
       <div>
         <Typography variant="h2">Maintenance & payments</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.75 }}>
-          Set a monthly charge for every resident and track receipts.
+          Set monthly charges and track payment receipts. Unpaid months are shown automatically; database bills are created when a payment
+          is requested or recorded.
         </Typography>
       </div>
       {error && (
@@ -195,12 +205,12 @@ export default function Maintenance() {
           </Grid>
         </form>
         <Typography color="text.secondary" variant="caption" sx={{ display: 'block', mt: 2 }}>
-          Bills for all 12 months of {currentYear} are created automatically. Choose a temporary amount for this month only or make
-          the rate permanent for upcoming months.
+          Unpaid entries are generated from each apartment’s creation month. Choose a temporary amount for this month only or make the
+          rate permanent for upcoming months.
         </Typography>
       </MainCard>
 
-      <MainCard title={`${monthLabel(month)} · ${monthBills.length} bills`}>
+      <MainCard title={`${monthLabel(month)} · ${monthBills.length} entries`}>
         {monthBills.length ? (
           <ResponsiveTable minWidth={900}>
             <Table size="small">
@@ -298,6 +308,7 @@ export default function Maintenance() {
           <Typography color="text.secondary">Add resident accounts to create maintenance bills.</Typography>
         ) : null}
       </MainCard>
+      <RevertedPaymentHistory payments={revertedPayments} users={users} isAdmin />
 
       <Dialog open={scopeDialogOpen} onClose={() => setScopeDialogOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Apply maintenance amount</DialogTitle>
@@ -317,8 +328,8 @@ export default function Maintenance() {
             </RadioGroup>
             {maintenanceScope === 'permanent' && (
               <Typography variant="caption" color="text.secondary">
-                This updates existing unpaid bills from the selected month onward and uses this rate for upcoming bills,
-                including next year. Paid bills and bills with payment requests are protected.
+                This rate applies to unpaid months from the selected month onward, including future months. Paid months and months with
+                a pending payment request are protected.
               </Typography>
             )}
           </Stack>

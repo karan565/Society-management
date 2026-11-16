@@ -5,13 +5,14 @@ import { requireAuth } from '../../middleware/auth.js';
 import { requireRoles, requireSocietyScope } from '../../middleware/access.js';
 import { USER_ROLES } from '../../lib/constants.js';
 import { asyncHandler, validate } from '../../lib/http.js';
-import { emailSchema, passwordSchema } from '../../lib/validation.js';
+import { emailSchema, passwordSchema, positiveAmountSchema } from '../../lib/validation.js';
 import * as controllers from './controllers.js';
 
 const router = Router();
 const createSocietySchema = z.object({
   name: z.string().trim().min(2).max(160),
   address: z.string().trim().max(500).default(''),
+  maintenanceAmount: positiveAmountSchema,
   chairmanName: z.string().trim().min(2).max(160),
   chairmanEmail: emailSchema,
   chairmanPassword: passwordSchema

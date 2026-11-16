@@ -15,6 +15,11 @@ const scheduleSchema = z.object({
   applyPermanently: z.boolean().default(false)
 });
 const idParams = z.object({ billId: z.string().uuid() });
+const paymentRequestSchema = paymentInputSchema.extend({ month: monthSchema });
+const generatedBillPaymentSchema = paymentInputSchema.extend({
+  userId: z.string().uuid(),
+  month: monthSchema
+});
 
 router.use(requireAuth, requireSocietyScope);
 router.get('/bills', asyncHandler(controllers.listBills));
@@ -26,11 +31,16 @@ router.post(
   asyncHandler(controllers.setMaintenanceSchedule)
 );
 router.post(
-  '/bills/:billId/payment-request',
+  '/bills/payment-request',
   requireRoles(USER_ROLES.RESIDENT),
-  validate(idParams, 'params'),
-  validate(paymentInputSchema),
+  validate(paymentRequestSchema),
   asyncHandler(controllers.submitPaymentRequest)
+);
+router.post(
+  '/bills/mark-paid',
+  requireRoles(USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN),
+  validate(generatedBillPaymentSchema),
+  asyncHandler(controllers.markGeneratedBillPaid)
 );
 router.post(
   '/bills/:billId/mark-paid',

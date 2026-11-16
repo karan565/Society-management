@@ -5,7 +5,6 @@ import { writeAudit } from '../../lib/audit.js';
 import { USER_ROLES, userSelect } from '../../lib/constants.js';
 import { AppError, parseId } from '../../lib/http.js';
 import { serializeUser } from '../../lib/serializers.js';
-import { ensureAnnualBills } from '../../services/billing.js';
 
 function assertCanManageTarget(actor, target, societyId) {
   if (!target || target.societyId !== societyId || target.role === USER_ROLES.SUPER_ADMIN) {
@@ -70,9 +69,6 @@ export async function createUser(req, res) {
       },
       select: userSelect
     });
-    if (created.role === USER_ROLES.RESIDENT) {
-      await ensureAnnualBills(tx, societyId, new Date().getFullYear());
-    }
     await writeAudit(tx, {
       societyId,
       actorId: req.user.id,

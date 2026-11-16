@@ -31,7 +31,11 @@ export function serializeUser(user) {
 export function serializeSociety(society) {
   return {
     ...society,
-    maintenanceAmount: Number(society.maintenanceAmount)
+    maintenanceAmount: Number(society.maintenanceAmount),
+    maintenanceOverrides: (society.maintenanceOverrides || []).map((override) => ({
+      month: override.month,
+      amount: Number(override.amount)
+    }))
   };
 }
 

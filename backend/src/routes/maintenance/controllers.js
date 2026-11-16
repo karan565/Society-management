@@ -3,7 +3,7 @@ import { writeAudit } from '../../lib/audit.js';
 import { USER_ROLES } from '../../lib/constants.js';
 import { AppError, parseId } from '../../lib/http.js';
 import { serializeBill } from '../../lib/serializers.js';
-import { assertCurrentYear, ensureAnnualBills, recordBillPayment } from '../../services/billing.js';
+import { assertCurrentYear, maintenanceAmountForMonth, recordBillPayment } from '../../services/billing.js';
 
 const methodToDb = { Cash: 'CASH', UPI: 'UPI', Card: 'CARD', Cheque: 'CHEQUE', NEFT: 'NEFT', RTGS: 'RTGS', Other: 'OTHER' };
 const methodToUi = { CASH: 'Cash', UPI: 'UPI', CARD: 'Card', CHEQUE: 'Cheque', NEFT: 'NEFT', RTGS: 'RTGS', OTHER: 'Other' };
@@ -11,33 +11,73 @@ const billInclude = {
   paymentRequest: true,
   resident: { select: { id: true, name: true, email: true, apartment: true, phone: true } }
 };
+const monthOf = (date) => date.toISOString().slice(0, 7);
+const currentMonth = () => monthOf(new Date());
+const dueDateFor = (month) => new Date(`${month}-10T00:00:00.000Z`);
+
+async function getResidentMonth(tx, societyId, userId, month) {
+  const [society, resident] = await Promise.all([
+    tx.society.findUnique({
+      where: { id: societyId },
+      include: { maintenanceOverrides: true }
+    }),
+    tx.user.findFirst({
+      where: { id: userId, societyId, role: USER_ROLES.RESIDENT }
+    })
+  ]);
+  if (!society) throw new AppError(404, 'The society could not be found.', 'SOCIETY_NOT_FOUND');
+  if (!resident) throw new AppError(404, 'The resident could not be found in this society.', 'RESIDENT_NOT_FOUND');
+
+  const startMonth = [monthOf(society.createdAt), monthOf(resident.createdAt)].sort().pop();
+  if (month < startMonth || month > currentMonth()) {
+    throw new AppError(400, 'This maintenance month is outside the resident’s active billing period.', 'INVALID_BILLING_MONTH');
+  }
+
+  return {
+    society,
+    resident,
+    amount: maintenanceAmountForMonth(society, month)
+  };
+}
 
 export async function listBills(req, res) {
-  const requestedYear =
-    req.user.role === USER_ROLES.RESIDENT
-      ? new Date().getFullYear()
-      : req.query.year === undefined
-        ? new Date().getFullYear()
-        : Number(req.query.year);
-  if (!Number.isInteger(requestedYear) || requestedYear < 2000 || requestedYear > 9999)
-    throw new AppError(400, 'Choose a valid bill year.', 'INVALID_YEAR');
-  if (requestedYear !== new Date().getFullYear())
-    throw new AppError(400, `Only maintenance bills for ${new Date().getFullYear()} are open in this view.`, 'YEAR_OUT_OF_RANGE');
-
-  await prisma.$transaction((tx) => ensureAnnualBills(tx, req.societyId, requestedYear));
-  const where = { societyId: req.societyId };
+  const where = {
+    societyId: req.societyId,
+    OR: [{ status: 'PAID' }, { paymentRequest: { is: { status: 'PENDING' } } }]
+  };
   if (req.user.role === USER_ROLES.RESIDENT) {
     where.userId = req.user.id;
-    where.OR = [{ month: { startsWith: `${new Date().getFullYear()}-` } }, { status: 'PAID' }];
-  } else {
-    where.month = { startsWith: `${requestedYear}-` };
   }
-  const bills = await prisma.maintenanceBill.findMany({
-    where,
-    include: billInclude,
-    orderBy: [{ month: 'desc' }, { resident: { apartment: 'asc' } }]
+  const [bills, revertedPayments] = await Promise.all([
+    prisma.maintenanceBill.findMany({
+      where,
+      include: billInclude,
+      orderBy: [{ month: 'desc' }, { resident: { apartment: 'asc' } }]
+    }),
+    prisma.maintenancePayment.findMany({
+      where: {
+        societyId: req.societyId,
+        status: 'REVERTED',
+        ...(req.user.role === USER_ROLES.RESIDENT ? { userId: req.user.id } : {})
+      },
+      orderBy: [{ revertedAt: 'desc' }, { createdAt: 'desc' }]
+    })
+  ]);
+  res.json({
+    bills: bills.map(serializeBill),
+    revertedPayments: revertedPayments.map((payment) => ({
+      id: payment.id,
+      userId: payment.userId,
+      month: payment.month,
+      amount: Number(payment.amount),
+      method: methodToUi[payment.method],
+      reference: payment.reference || undefined,
+      receiptNo: payment.receiptNo,
+      paidAt: payment.paidAt.toISOString(),
+      revertedAt: payment.revertedAt?.toISOString()
+    })),
+    currentYear: new Date().getFullYear()
   });
-  res.json({ bills: bills.map(serializeBill), currentYear: new Date().getFullYear() });
 }
 
 export async function getBill(req, res) {
@@ -64,23 +104,32 @@ export async function setMaintenanceSchedule(req, res) {
     });
     if (!residents.length) throw new AppError(409, 'Create resident accounts before setting maintenance.', 'NO_RESIDENTS');
 
-    const selectedMonthBills = await tx.maintenanceBill.findMany({
-      where: { societyId: req.societyId, userId: { in: residents.map((resident) => resident.id) }, month },
+    const lastMonth = applyPermanently ? `${new Date().getFullYear()}-12` : month;
+    const months = [];
+    for (let cursor = month; cursor <= lastMonth; ) {
+      months.push(cursor);
+      const nextDate = new Date(`${cursor}-01T00:00:00.000Z`);
+      nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
+      cursor = nextDate.toISOString().slice(0, 7);
+    }
+
+    const targetBills = await tx.maintenanceBill.findMany({
+      where: { societyId: req.societyId, userId: { in: residents.map((resident) => resident.id) }, month: { in: months } },
       include: { paymentRequest: true }
     });
-    const lockedSelectedBill = selectedMonthBills.find(
+    const lockedBill = targetBills.find(
       (bill) =>
         Number(bill.amount) !== amount &&
         (bill.status === 'PAID' || bill.paymentRequest?.status === 'PENDING')
     );
-    if (lockedSelectedBill) {
+    if (lockedBill) {
       const person = await tx.user.findUnique({
-        where: { id: lockedSelectedBill.userId },
+        where: { id: lockedBill.userId },
         select: { name: true, apartment: true }
       });
       throw new AppError(
         409,
-        `Maintenance for ${person.apartment || person.name} in ${month} is already paid or has a payment request and cannot be changed.`,
+        `Maintenance for ${person.apartment || person.name} in ${lockedBill.month} is already paid or has a payment request and cannot be changed.`,
         'BILL_LOCKED'
       );
     }
@@ -104,27 +153,6 @@ export async function setMaintenanceSchedule(req, res) {
           }
     });
 
-    const lastMonth = applyPermanently ? `${new Date().getFullYear()}-12` : month;
-    const months = [];
-    for (let cursor = month; cursor <= lastMonth; ) {
-      months.push(cursor);
-      const nextDate = new Date(`${cursor}-01T00:00:00.000Z`);
-      nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
-      cursor = nextDate.toISOString().slice(0, 7);
-    }
-    const targetBills = await tx.maintenanceBill.findMany({
-      where: { societyId: req.societyId, userId: { in: residents.map((resident) => resident.id) }, month: { in: months } },
-      include: { paymentRequest: true }
-    });
-    for (const bill of targetBills) {
-      if (bill.status === 'PENDING' && bill.paymentRequest?.status !== 'PENDING') {
-        await tx.maintenanceBill.update({
-          where: { id: bill.id },
-          data: { amount, dueDate: new Date(`${bill.month}-10T00:00:00.000Z`) }
-        });
-      }
-    }
-    await ensureAnnualBills(tx, req.societyId, new Date().getFullYear());
     await writeAudit(tx, {
       societyId: req.societyId,
       actorId: req.user.id,
@@ -143,8 +171,33 @@ export async function setMaintenanceSchedule(req, res) {
   res.json({ month, amount, applyPermanently, bills: result.map(serializeBill) });
 }
 
+async function getOrCreateUnpaidBill(tx, societyId, resident, month, amount) {
+  let bill = await tx.maintenanceBill.findUnique({
+    where: { societyId_userId_month: { societyId, userId: resident.id, month } },
+    include: { paymentRequest: true }
+  });
+
+  if (bill?.status === 'PAID') throw new AppError(409, 'This maintenance month is already paid.', 'BILL_ALREADY_PAID');
+  if (bill?.paymentRequest?.status === 'PENDING')
+    throw new AppError(409, 'A payment request for this month is already awaiting review.', 'REQUEST_PENDING');
+
+  if (!bill) {
+    bill = await tx.maintenanceBill.create({
+      data: { societyId, userId: resident.id, month, amount, dueDate: dueDateFor(month) },
+      include: { paymentRequest: true }
+    });
+  } else {
+    bill = await tx.maintenanceBill.update({
+      where: { id: bill.id },
+      data: { amount, dueDate: dueDateFor(month) },
+      include: { paymentRequest: true }
+    });
+  }
+  return bill;
+}
+
 export async function submitPaymentRequest(req, res) {
-  const billId = parseId(req.params.billId, 'bill id');
+  const { month } = req.body;
   const method = req.body.method;
   if (new Date(`${req.body.paymentDate}T00:00:00.000Z`) > new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`))
     throw new AppError(400, 'Payment date cannot be in the future.', 'INVALID_PAYMENT_DATE');
@@ -152,16 +205,8 @@ export async function submitPaymentRequest(req, res) {
     throw new AppError(400, `Enter the transaction or instrument details for ${method}.`, 'PAYMENT_REFERENCE_REQUIRED');
 
   const savedRequest = await prisma.$transaction(async (tx) => {
-    const bill = await tx.maintenanceBill.findFirst({
-      where: { id: billId, societyId: req.societyId, userId: req.user.id },
-      include: { paymentRequest: true }
-    });
-    if (!bill) throw new AppError(404, 'This maintenance bill does not belong to your account.', 'BILL_NOT_FOUND');
-    if (!bill.month.startsWith(`${new Date().getFullYear()}-`))
-      throw new AppError(400, `Payment requests are only open for ${new Date().getFullYear()}.`, 'YEAR_OUT_OF_RANGE');
-    if (bill.status !== 'PENDING') throw new AppError(409, 'Only pending bills can have a payment request.', 'BILL_NOT_PENDING');
-    if (bill.paymentRequest?.status === 'PENDING')
-      throw new AppError(409, 'A payment request for this bill is already awaiting review.', 'REQUEST_PENDING');
+    const { resident, amount } = await getResidentMonth(tx, req.societyId, req.user.id, month);
+    const bill = await getOrCreateUnpaidBill(tx, req.societyId, resident, month, amount);
 
     const data = {
       method: methodToDb[method],
@@ -191,6 +236,25 @@ export async function submitPaymentRequest(req, res) {
       submittedBy: req.user.id
     }
   });
+}
+
+export async function markGeneratedBillPaid(req, res) {
+  const { userId, month, ...details } = req.body;
+  const result = await prisma.$transaction(async (tx) => {
+    const { resident, amount } = await getResidentMonth(tx, req.societyId, userId, month);
+    const bill = await getOrCreateUnpaidBill(tx, req.societyId, resident, month, amount);
+    const paid = await recordBillPayment(tx, bill, details, req.user);
+    await writeAudit(tx, {
+      societyId: req.societyId,
+      actorId: req.user.id,
+      action: 'maintenance.payment_recorded',
+      entityType: 'MaintenanceBill',
+      entityId: bill.id,
+      metadata: { amount: Number(bill.amount), method: details.method, receiptNo: paid.receiptNo }
+    });
+    return tx.maintenanceBill.findUnique({ where: { id: bill.id }, include: billInclude });
+  }, { isolationLevel: 'Serializable' });
+  res.json({ bill: serializeBill(result) });
 }
 
 export async function markBillPaid(req, res) {
@@ -252,7 +316,7 @@ export async function acceptPaymentRequest(req, res) {
 
 export async function revertBillPayment(req, res) {
   const billId = parseId(req.params.billId, 'bill id');
-  const result = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const bill = await tx.maintenanceBill.findFirst({ where: { id: billId, societyId: req.societyId } });
     if (!bill || bill.status !== 'PAID') throw new AppError(409, 'Only accepted payments can be reverted.', 'PAYMENT_NOT_REVERTIBLE');
     const currentPayment = await tx.maintenancePayment.findFirst({
@@ -262,34 +326,32 @@ export async function revertBillPayment(req, res) {
     if (currentPayment) {
       await tx.maintenancePayment.update({
         where: { id: currentPayment.id },
-        data: { status: 'REVERTED', revertedAt: new Date() }
+        data: { status: 'REVERTED', revertedAt: new Date(), billId: null }
       });
     }
-    await tx.maintenanceBill.update({
-      where: { id: billId },
-      data: {
-        status: 'PENDING',
-        paidAt: null,
-        paymentMethod: null,
-        paymentReference: '',
-        paymentNotes: '',
-        paymentAcceptedById: null,
-        paymentAcceptedByName: '',
-        paymentRecordedAt: null,
-        receiptNo: null
-      }
-    });
+    await tx.maintenanceBill.delete({ where: { id: billId } });
     await writeAudit(tx, {
       societyId: req.societyId,
       actorId: req.user.id,
       action: 'maintenance.payment_reverted',
       entityType: 'MaintenanceBill',
       entityId: billId,
-      metadata: { receiptNo: bill.receiptNo, amount: Number(bill.amount) }
+      metadata: {
+        receiptNo: bill.receiptNo,
+        amount: Number(bill.amount),
+        month: bill.month,
+        payment: currentPayment
+          ? {
+              method: currentPayment.method,
+              reference: currentPayment.reference,
+              notes: currentPayment.notes,
+              paidAt: currentPayment.paidAt.toISOString()
+            }
+          : null
+      }
     });
-    return tx.maintenanceBill.findUnique({ where: { id: billId }, include: billInclude });
   }, { isolationLevel: 'Serializable' });
-  res.json({ bill: serializeBill(result) });
+  res.json({ reverted: true });
 }
 
 export async function listBillPayments(req, res) {

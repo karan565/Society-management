@@ -23,6 +23,7 @@ import Typography from '@mui/material/Typography';
 
 import MainCard from 'ui-component/cards/MainCard';
 import ResponsiveTable from 'ui-component/ResponsiveTable';
+import RevertedPaymentHistory from './RevertedPaymentHistory';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 const monthLabel = (month) => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
@@ -34,13 +35,13 @@ const createEmptyPayment = () => ({
 });
 
 export default function MyMaintenance() {
-  const { currentUser, currentSociety, currentYear, bills, submitPaymentRequest } = useSociety();
+  const { currentUser, currentSociety, bills, revertedPayments, submitPaymentRequest } = useSociety();
   const [selectedBill, setSelectedBill] = useState(null);
   const [paymentDetails, setPaymentDetails] = useState(createEmptyPayment);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const ownBills = bills.filter((bill) => bill.userId === currentUser.id).sort((a, b) => b.month.localeCompare(a.month));
-  const pending = ownBills.filter((bill) => bill.status === 'pending' && bill.month.startsWith(`${currentYear}-`));
+  const ownBills = bills.filter((bill) => bill.userId === currentUser.id).sort((a, b) => a.month.localeCompare(b.month));
+  const pending = ownBills.filter((bill) => bill.status === 'pending');
   const paid = ownBills.filter((bill) => bill.status === 'paid');
 
   const openPaymentDialog = (bill) => {
@@ -59,7 +60,7 @@ export default function MyMaintenance() {
     setError('');
     setSuccess('');
     try {
-      await submitPaymentRequest(selectedBill.id, paymentDetails, currentUser);
+      await submitPaymentRequest(selectedBill, paymentDetails);
       setSuccess(`Your payment details for ${monthLabel(selectedBill.month)} have been submitted for review.`);
       closePaymentDialog();
     } catch (submitError) {
@@ -121,12 +122,12 @@ export default function MyMaintenance() {
       <div>
         <Typography variant="h2">My maintenance</Typography>
         <Typography color="text.secondary" sx={{ mt: 0.75 }}>
-          Current-year bills are available to pay across all 12 months. The society committee will review submitted payment details.
+          Maintenance entries start from when your apartment was added. The society committee reviews submitted payment details.
         </Typography>
       </div>
       {error && !selectedBill && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" onClose={() => setSuccess('')}>{success}</Alert>}
-      <MainCard title={`Pending bills · ${pending.length}`}>
+      <MainCard title={`Unpaid maintenance · ${pending.length}`}>
         {pending.length ? (
           renderRows(pending, false)
         ) : (
@@ -140,6 +141,7 @@ export default function MyMaintenance() {
           <Typography color="text.secondary">Paid receipts will appear here after the cashier records your payment.</Typography>
         )}
       </MainCard>
+      <RevertedPaymentHistory payments={revertedPayments} users={[currentUser]} isAdmin={false} />
       <Dialog open={Boolean(selectedBill)} onClose={closePaymentDialog} fullWidth maxWidth="sm">
         <form onSubmit={handleSubmitPayment}>
           <DialogTitle>Submit payment details</DialogTitle>

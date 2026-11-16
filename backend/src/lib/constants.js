@@ -30,7 +30,9 @@ export const societySelect = {
   isActive: true,
   expensesVisibleToResidents: true,
   maintenanceAmount: true,
+  initialMaintenanceAmount: true,
   maintenanceEffectiveFrom: true,
+  maintenanceOverrides: { select: { month: true, amount: true } },
   createdAt: true,
   updatedAt: true
 };

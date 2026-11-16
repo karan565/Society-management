@@ -53,11 +53,13 @@ Route modules are grouped under `src/routes/<domain>/`. Each `index.js` declares
 | Auth | `POST /api/auth/login`, `/refresh`, `/logout`, `/logout-all`, `/change-password`; `GET /api/auth/me`, `/sessions`; `DELETE /api/auth/sessions/:sessionId` |
 | Societies | `GET/POST /api/societies`; `GET/PATCH/DELETE /api/societies/:societyId`; `GET /api/societies/current`; `PATCH /api/societies/current/finance-visibility` |
 | Users | `GET/POST /api/users`; `PATCH /api/users/me`; `PATCH /api/users/:userId`; `PATCH /api/users/:userId/access`; `PUT /api/users/:userId/password`; `DELETE /api/users/:userId` |
-| Maintenance | `GET /api/maintenance/bills?year=YYYY`, `/api/maintenance/bills/:billId`; `POST /api/maintenance/schedule`; payment request, mark-paid, accept-request, revert, and payment-history endpoints under `/api/maintenance/bills/:billId` |
+| Maintenance | `GET /api/maintenance/bills`, `GET /api/maintenance/bills/:billId`; `POST /api/maintenance/schedule`; `POST /api/maintenance/bills/payment-request`, `/api/maintenance/bills/mark-paid`, and bill acceptance/reversal/history endpoints |
 | Finances | `GET /api/finances/balance`, `/monthly?year=YYYY`, `/statement?month=YYYY-MM`, `/transactions?month=YYYY-MM`, `/transactions/:transactionId`; `POST /api/finances/transactions`; `PATCH/DELETE /api/finances/transactions/:transactionId` |
 | Complaints | `GET/POST /api/complaints`; `GET /api/complaints/:complaintId`; `PATCH /api/complaints/:complaintId/status`; `DELETE /api/complaints/:complaintId` |
 
-Maintenance bills are generated idempotently for all twelve months of the current year at API startup, hourly after a year rollover, when the bill list is requested, and when a resident is added. Paid bills and bills with pending payment requests are protected from amount changes. Payment acceptance, bill updates, receipts, reversals, finance changes, society creation, and password/session changes use database transactions where multiple writes must succeed together.
+Unpaid maintenance months are generated in the frontend from the later of the society and resident creation months; they are not stored as bills. A bill is stored when a resident submits a payment request or when an admin records payment. Reverting a payment removes the bill but keeps the payment in the ledger and lists it in maintenance payment history; reverted payments are excluded from finance totals. Paid bills and bills with pending payment requests are protected from amount changes. Payment acceptance, bill updates, receipts, reversals, finance changes, society creation, and password/session changes use database transactions where multiple writes must succeed together.
+
+When a Super Admin creates a society, the initial monthly maintenance amount is required and becomes the permanent rate from the society’s creation month. Existing societies continue using their stored maintenance amount until a rate is changed.
 
 ## Database migrations
 

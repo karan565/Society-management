@@ -16,7 +16,14 @@ import Typography from '@mui/material/Typography';
 import { USER_ROLES } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
 
-const blankForm = { name: '', address: '', chairmanName: '', chairmanEmail: '', chairmanPassword: '' };
+const blankForm = {
+  name: '',
+  address: '',
+  maintenanceAmount: '',
+  chairmanName: '',
+  chairmanEmail: '',
+  chairmanPassword: ''
+};
 
 export default function Societies() {
   const { currentUser, currentSociety, societies, allUsers, selectSociety, createSociety } = useSociety();
@@ -112,6 +119,15 @@ export default function Societies() {
               {error && <Alert severity="error">{error}</Alert>}
               <TextField label="Society name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
               <TextField label="Address" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} />
+              <TextField
+                label="Initial monthly maintenance (INR)"
+                type="number"
+                required
+                inputProps={{ min: 0.01, step: 0.01 }}
+                helperText="This becomes the permanent rate from the society’s creation month."
+                value={form.maintenanceAmount}
+                onChange={(event) => setForm({ ...form, maintenanceAmount: event.target.value })}
+              />
               <Typography variant="subtitle1" sx={{ pt: 1 }}>First chairperson</Typography>
               <TextField label="Chairperson name" required value={form.chairmanName} onChange={(event) => setForm({ ...form, chairmanName: event.target.value })} />
               <TextField label="Chairperson email" type="email" required value={form.chairmanEmail} onChange={(event) => setForm({ ...form, chairmanEmail: event.target.value })} />

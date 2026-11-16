@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import PropTypes from 'prop-types';
 import { ADMIN_ROLES, USER_ROLES } from 'common/constants';
 import { apiRequest, refreshSession, setAccessToken, withApiActivity } from 'api/client';
+import { buildMaintenanceEntries } from 'utils/maintenanceEntries';
 
 const SocietyContext = createContext(null);
 
@@ -12,6 +13,7 @@ function emptyWorkspace() {
     users: [],
     allUsers: [],
     bills: [],
+    revertedPayments: [],
     expenses: [],
     availableFund: 0,
     complaints: [],
@@ -151,12 +153,14 @@ export function SocietyProvider({ children }) {
           ]);
 
         const users = usersResult.users;
+        const bills = buildMaintenanceEntries(users, currentSociety, billsResult.bills);
         setWorkspace({
           societies,
           currentSociety,
           users,
           allUsers: user.role === USER_ROLES.SUPER_ADMIN ? allUsers : users,
-          bills: billsResult.bills,
+          bills,
+          revertedPayments: billsResult.revertedPayments || [],
           expenses: transactionsResult.transactions,
           availableFund: balanceResult.availableFund,
           complaints: complaintsResult.complaints,
@@ -271,11 +275,11 @@ export function SocietyProvider({ children }) {
           loadWorkspace(currentUser, societyId, 'Switching Society Workspace…')
         );
       },
-      async createSociety({ name, address, chairmanName, chairmanEmail, chairmanPassword }) {
+      async createSociety({ name, address, maintenanceAmount, chairmanName, chairmanEmail, chairmanPassword }) {
         return withApiActivity('Creating Society…', async () => {
           const result = await request('/societies', {
             method: 'POST',
-            body: { name, address, chairmanName, chairmanEmail, chairmanPassword },
+            body: { name, address, maintenanceAmount, chairmanName, chairmanEmail, chairmanPassword },
             loadingMessage: 'Creating Society…'
           });
           await loadWorkspace(currentUser, result.society.id, 'Creating Society…');
@@ -330,12 +334,12 @@ export function SocietyProvider({ children }) {
           })
         );
       },
-      async submitPaymentRequest(billId, paymentDetails) {
+      async submitPaymentRequest(bill, paymentDetails) {
         const result = await runWorkspaceMutation('Submitting payment request…', () =>
-          request(`/maintenance/bills/${billId}/payment-request`, {
+          request('/maintenance/bills/payment-request', {
             ...societyRequestOptions(activeSocietyId),
             method: 'POST',
-            body: paymentDetails,
+            body: { ...paymentDetails, month: bill.month },
             loadingMessage: 'Submitting payment request…'
           })
         );
@@ -350,12 +354,12 @@ export function SocietyProvider({ children }) {
           })
         );
       },
-      async markBillPaid(billId, paymentDetails) {
+      async markBillPaid(bill, paymentDetails) {
         await runWorkspaceMutation('Recording bill payment…', () =>
-          request(`/maintenance/bills/${billId}/mark-paid`, {
+          request('/maintenance/bills/mark-paid', {
             ...societyRequestOptions(activeSocietyId),
             method: 'POST',
-            body: paymentDetails,
+            body: { ...paymentDetails, userId: bill.userId, month: bill.month },
             loadingMessage: 'Recording bill payment…'
           })
         );

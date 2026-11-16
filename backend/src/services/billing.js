@@ -1,55 +1,18 @@
 import crypto from 'node:crypto';
 
-import { prisma } from '../db.js';
 import { AppError } from '../lib/http.js';
 import { mapPaymentMethod } from '../lib/validation.js';
 
 const currentYear = () => new Date().getFullYear();
-const monthKey = (year, number) => `${year}-${String(number).padStart(2, '0')}`;
 const asDate = (date) => new Date(`${date}T00:00:00.000Z`);
 
-export async function ensureAnnualBills(tx, societyId, year) {
-  const society = await tx.society.findUnique({
-    where: { id: societyId },
-    include: { maintenanceOverrides: true }
-  });
-  if (!society) throw new AppError(404, 'The society could not be found.', 'SOCIETY_NOT_FOUND');
-  const residents = await tx.user.findMany({ where: { societyId, role: 'RESIDENT' }, select: { id: true } });
-  const overrides = new Map(society.maintenanceOverrides.map((override) => [override.month, override.amount]));
-  const generated = [];
-
-  for (let monthNumber = 1; monthNumber <= 12; monthNumber += 1) {
-    const month = monthKey(year, monthNumber);
-    const permanentAmount =
-      society.maintenanceEffectiveFrom && month >= society.maintenanceEffectiveFrom
-        ? society.maintenanceAmount
-        : 3500;
-    const amount = overrides.get(month) ?? permanentAmount;
-    for (const resident of residents) {
-      generated.push({
-        societyId,
-        userId: resident.id,
-        month,
-        amount,
-        dueDate: asDate(`${month}-10`)
-      });
-    }
+export function maintenanceAmountForMonth(society, month) {
+  const override = society.maintenanceOverrides.find((item) => item.month === month);
+  if (override) return Number(override.amount);
+  if (society.maintenanceEffectiveFrom && month >= society.maintenanceEffectiveFrom) {
+    return Number(society.maintenanceAmount);
   }
-
-  if (generated.length) {
-    await tx.maintenanceBill.createMany({ data: generated, skipDuplicates: true });
-  }
-}
-
-export async function ensureAllCurrentYearBills() {
-  const societies = await prisma.society.findMany({
-    where: { isActive: true },
-    select: { id: true }
-  });
-  const year = currentYear();
-  for (const society of societies) {
-    await prisma.$transaction((tx) => ensureAnnualBills(tx, society.id, year));
-  }
+  return Number(society.initialMaintenanceAmount);
 }
 
 function assertPaymentDetails(details) {
@@ -75,6 +38,9 @@ export async function recordBillPayment(tx, bill, details, actor, { fromRequest 
   await tx.maintenancePayment.create({
     data: {
       billId: bill.id,
+      societyId: bill.societyId,
+      userId: bill.userId,
+      month: bill.month,
       recordedById: actor.id,
       amount: bill.amount,
       method: valid.method,

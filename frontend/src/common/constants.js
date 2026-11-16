@@ -12,8 +12,6 @@ export const USER_ROLE_LABELS = Object.freeze({
 
 export const ADMIN_ROLES = Object.freeze([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN]);
 
-export const DEFAULT_MAINTENANCE_AMOUNT = 3500;
-
 export const FINANCIAL_TRANSACTION_TYPES = Object.freeze({
   INCOME: 'income',
   EXPENSE: 'expense'
