@@ -3,7 +3,7 @@ export const password = 'Pass@123';
 
 const residentsByWing = {
   A: [
-    { apartment: 'A-11', name: 'Aarav Sharma' },
+    { apartment: 'A-1', name: 'Aarav Sharma' },
     { apartment: 'A-2', name: 'Priya Verma' },
     { apartment: 'A-3', name: 'Rohan Mehta' },
     { apartment: 'A-4', name: 'Ananya Gupta' },
