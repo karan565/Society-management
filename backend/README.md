@@ -74,3 +74,8 @@ business records are stored in PostgreSQL, not browser local storage.
 The initial `npm run db:seed` creates only the Super Admin configured by
 `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD`. Sign in with that account, then
 create a society and its first chairperson from the portal.
+
+To create the Amardeep Apartment demo society and its 28 resident accounts,
+run `npm run db:seed:amardeep` after applying the database migrations. Each
+resident uses the password `Pass@123`; the demo seeder is blocked when
+`NODE_ENV=production`.

@@ -23,6 +23,7 @@ import { USER_ROLE_LABELS, USER_ROLES } from 'common/constants';
 import { useSociety } from 'contexts/SocietyContext';
 
 const emptyMember = { name: '', email: '', role: USER_ROLES.RESIDENT, title: '', apartment: '', phone: '', password: '' };
+const apartmentCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const roleLabel = (user) =>
   user.role === USER_ROLES.ADMIN && user.title ? user.title : USER_ROLE_LABELS[user.role] || USER_ROLE_LABELS[USER_ROLES.RESIDENT];
 
@@ -35,7 +36,24 @@ export default function Members() {
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const members = useMemo(() => users.filter((user) => user.role !== USER_ROLES.SUPER_ADMIN), [users]);
+  const members = useMemo(
+    () =>
+      users
+        .filter((user) => user.role !== USER_ROLES.SUPER_ADMIN)
+        .sort((first, second) => {
+          const firstIsResident = first.role === USER_ROLES.RESIDENT;
+          const secondIsResident = second.role === USER_ROLES.RESIDENT;
+
+          if (firstIsResident !== secondIsResident) return firstIsResident ? 1 : -1;
+          if (!firstIsResident) return first.name.localeCompare(second.name);
+
+          return (
+            apartmentCollator.compare(first.apartment || '', second.apartment || '') ||
+            first.name.localeCompare(second.name)
+          );
+        }),
+    [users]
+  );
 
   const closeDialog = () => {
     setDialog('');

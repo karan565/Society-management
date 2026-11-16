@@ -23,6 +23,33 @@ function societyRequestOptions(societyId) {
   return societyId ? { societyId } : {};
 }
 
+function storedSocietyKey(userId) {
+  return `society-management:active-society:${userId}`;
+}
+
+function getStoredSocietyId(user) {
+  if (user?.role !== USER_ROLES.SUPER_ADMIN || typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage.getItem(storedSocietyKey(user.id));
+  } catch (error) {
+    console.warn('Could not restore the selected society from local storage:', error);
+    return null;
+  }
+}
+
+function storeSocietyId(user, societyId) {
+  if (user?.role !== USER_ROLES.SUPER_ADMIN || typeof window === 'undefined') return;
+
+  try {
+    const key = storedSocietyKey(user.id);
+    if (societyId) window.localStorage.setItem(key, societyId);
+    else window.localStorage.removeItem(key);
+  } catch (error) {
+    console.warn('Could not save the selected society to local storage:', error);
+  }
+}
+
 export function SocietyProvider({ children }) {
   const [workspace, setWorkspace] = useState(emptyWorkspace);
   const [currentUser, setCurrentUser] = useState(null);
@@ -100,6 +127,7 @@ export function SocietyProvider({ children }) {
             currentYear: new Date().getFullYear()
           });
           setActiveSocietyId(null);
+          storeSocietyId(user, null);
           return;
         }
 
@@ -135,6 +163,7 @@ export function SocietyProvider({ children }) {
           currentYear: billsResult.currentYear
         });
         setActiveSocietyId(selectedSocietyId);
+        storeSocietyId(user, selectedSocietyId);
       } catch (error) {
         if (error.status !== 401) setWorkspaceError(error.message);
         throw error;
@@ -161,7 +190,7 @@ export function SocietyProvider({ children }) {
     try {
       await withApiActivity('Checking your Session…', async () => {
         const session = await refreshSession('Checking your session…');
-        await loadWorkspace(session.user, null, 'Checking your session…');
+        await loadWorkspace(session.user, getStoredSocietyId(session.user), 'Checking your session…');
         setCurrentUser(session.user);
       });
     } catch (error) {
@@ -209,7 +238,7 @@ export function SocietyProvider({ children }) {
           });
           setAccessToken(result.accessToken);
           try {
-            await loadWorkspace(result.user, null, 'Signing you in…');
+            await loadWorkspace(result.user, getStoredSocietyId(result.user), 'Signing you in…');
             setCurrentUser(result.user);
           } catch (error) {
             setAccessToken(null);
